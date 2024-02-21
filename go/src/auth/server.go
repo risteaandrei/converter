@@ -16,6 +16,7 @@ import (
 
 var db *sql.DB
 
+// TODO: these should be moved out of codebase into hidden location
 const (
 	JWT_SECRET  = "JWT_SECRET"
 	PG_USER     = "postgres"
