@@ -67,6 +67,7 @@ func validateHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
+		fmt.Println("Error parsing token:", err)
 		http.Error(w, "Not authorized", http.StatusForbidden)
 		return
 	}
@@ -75,6 +76,7 @@ func validateHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(claims)
 	} else {
+		fmt.Println("Error checking claims:", claims)
 		http.Error(w, "Not authorized", http.StatusForbidden)
 	}
 }
