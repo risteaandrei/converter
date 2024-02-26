@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+data:
+  init.sql: |
+    \c auth;
+
+    CREATE TABLE IF NOT EXISTS "users" (
+        id SERIAL PRIMARY KEY,
+        email varchar(255) NOT NULL,
+        password VARCHAR(255) NOT NULL
+    );
+
+    INSERT INTO "users" (email, password) VALUES ('foo@bar.com', 'foobarpass') ON CONFLICT DO NOTHING;

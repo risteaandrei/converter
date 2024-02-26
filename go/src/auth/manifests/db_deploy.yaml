@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-db
+spec:
+  selector:
+    matchLabels:
+      app: auth-db
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: auth-db
+    spec:
+      containers:
+      - name: auth-db
+        image: postgres:latest
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: auth
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          value: secret
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: auth-storage
+        - mountPath: /docker-entrypoint-initdb.d/init.sql
+          name: init-script
+          subPath: init.sql
+      volumes:
+      - name: auth-storage
+        persistentVolumeClaim:
+          claimName: auth-db
+      - name: init-script
+        configMap:
+          name: postgres-init-script
+          items:
+          - key: init.sql
+            path: init.sql

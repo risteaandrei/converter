@@ -16,55 +16,36 @@ import (
 
 var db *sql.DB
 
-// TODO: these should be moved out of codebase into hidden location
+// TODO: these should be moved out of codebase into k8s config/secret
 const (
 	JWT_SECRET  = "JWT_SECRET"
+	PG_HOST     = "auth-db"
 	PG_USER     = "postgres"
 	PG_USERS_DB = "auth"
 	PG_PASSWORD = "secret"
 )
 
-func main() {
-	var err error
-	connString := fmt.Sprintf("user=%v dbname=%v password=%v sslmode=disable", PG_USER, PG_USERS_DB, PG_PASSWORD)
-	db, err = sql.Open("postgres", connString)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	r := mux.NewRouter()
-
-	r.HandleFunc("/login", loginHandler).Methods("POST")
-	r.HandleFunc("/validate", validateHandler).Methods("POST")
-
-	fmt.Println("Server starting on port 8080...")
-	http.ListenAndServe(":8080", r)
-}
-
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	var auth struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&auth); err != nil {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+	authUsername, authPassword, ok := r.BasicAuth()
+	if !ok {
+		http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
 		return
 	}
 
 	var email, password string
-	err := db.QueryRow("SELECT email, password FROM users WHERE email = $1", auth.Username).Scan(&email, &password)
+	err := db.QueryRow("SELECT email, password FROM users WHERE email = $1", authUsername).Scan(&email, &password)
 	if err != nil {
+		fmt.Println("Error when querying credentials", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if authUsername != email || authPassword != password {
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
-	if auth.Username != email || auth.Password != password {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-		return
-	}
-
-	tokenString, err := createJWT(auth.Username, JWT_SECRET, true)
+	tokenString, err := createJWT(authUsername, JWT_SECRET, true)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -108,4 +89,30 @@ func createJWT(username, secret string, authz bool) (string, error) {
 
 	tokenString, err := token.SignedString([]byte(secret))
 	return tokenString, err
+}
+
+func main() {
+	var err error
+	connString := fmt.Sprintf(
+		"host=%v user=%v dbname=%v password=%v sslmode=disable",
+		PG_HOST, PG_USER, PG_USERS_DB, PG_PASSWORD,
+	)
+	db, err = sql.Open("postgres", connString)
+	if err != nil {
+		fmt.Println("Failed to open connection to DB")
+		log.Fatal(err)
+	}
+	err = db.Ping()
+	if err != nil {
+		fmt.Println("Unable to ping DB")
+		log.Fatal(err)
+	}
+
+	r := mux.NewRouter()
+
+	r.HandleFunc("/login", loginHandler).Methods("POST")
+	r.HandleFunc("/validate", validateHandler).Methods("POST")
+
+	fmt.Println("Server starting on port 5000...")
+	http.ListenAndServe(":5000", r)
 }
