@@ -254,13 +254,15 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	fmt.Println("Connecting to videos DB ...")
+	// TODO this should be moved to configuration
+	uri := "mongodb://mongo_admin:admin123@filesdb-service:27017"
 	var err error
-	videoDb, err = connectToMongoDB("mongodb://localhost:27017", "videos")
+	videoDb, err = connectToMongoDB(uri, "videos")
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Connecting to mp3s DB ...")
-	mp3Db, err = connectToMongoDB("mongodb://localhost:27017", "mp3s")
+	mp3Db, err = connectToMongoDB(uri, "mp3s")
 	if err != nil {
 		log.Fatal(err)
 	}

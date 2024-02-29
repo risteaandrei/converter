@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filesdb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: filesdb
+  template:
+    metadata:
+      labels:
+        app: filesdb
+    spec:
+      containers:
+      - name: filesdb
+        image: mongo:latest
+        ports:
+        - containerPort: 27017
+        env:
+          - name: MONGO_INITDB_ROOT_USERNAME
+            value: "mongo_admin"  # Use more secure credentials in production
+          - name: MONGO_INITDB_ROOT_PASSWORD
+            value: "admin123"  # Use more secure credentials in production
+        volumeMounts:
+        - name: filesdb-data
+          mountPath: /data/db
+      volumes:
+      - name: filesdb-data
+        persistentVolumeClaim:
+          claimName: filesdb-pvc
