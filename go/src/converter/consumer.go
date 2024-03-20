@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/streadway/amqp"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/gridfs"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -19,7 +20,7 @@ import (
 
 func main() {
 	// Connect to MongoDB
-	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://host.minikube.internal:27017"))
+	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://mongo_admin:admin123@filesdb-service:27017"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -71,29 +72,51 @@ func main() {
 	fmt.Println("Shutting down")
 }
 
+type videoIDStruct struct {
+	FileID string `json:"fileID"`
+}
+
 func toMP3Start(videoID []byte, dbVideos *mongo.Database, dbMp3s *mongo.Database, channel *amqp.Channel, deliveryTag uint64) error {
+	fmt.Println("Received video id", string(videoID))
+
+	var vid videoIDStruct
+	if err := json.Unmarshal(videoID, &vid); err != nil {
+		fmt.Println("Error unmarshalling videoID:", err)
+		return err
+	}
+
 	// Assuming videoID is the GridFS file ID for the video file
 	bucket, _ := gridfs.NewBucket(dbVideos)
 	var buf bytes.Buffer
-	_, err := bucket.DownloadToStream(videoID, &buf)
+	fileID, err := primitive.ObjectIDFromHex(string(vid.FileID))
 	if err != nil {
+		fmt.Println("Error ObjectIDFromHex:", err)
+		return err
+	}
+	_, err = bucket.DownloadToStream(fileID, &buf)
+	if err != nil {
+		fmt.Println("Error DownloadToStream:", err)
 		return err
 	}
 
 	// Assume buf now contains the video file. We would save this to a temporary file to process with ffmpeg.
-	tmpVideoFile := "/tmp/" + string(videoID) + ".video"
+	tmpVideoFile := "/tmp/" + string(vid.FileID) + ".video"
 	err = os.WriteFile(tmpVideoFile, buf.Bytes(), 0644)
 	if err != nil {
+		fmt.Println("Error writing to file:", err)
 		return err
 	}
 
 	// Convert video to MP3 using ffmpeg
-	tmpMp3File := "/tmp" + string(videoID) + ".mp3" // This should be a unique temporary file for each conversion
+	tmpMp3File := "/tmp" + string(vid.FileID) + ".mp3" // This should be a unique temporary file for each conversion
 	cmd := exec.Command("ffmpeg", "-i", tmpVideoFile, "-vn", "-ar", "44100", "-ac", "2", "-b:a", "192k", tmpMp3File)
 	err = cmd.Run()
 	if err != nil {
+		fmt.Println("Error converting to mp3:", err)
 		return err
 	}
+
+	fmt.Println("Converted to MP3")
 
 	// Read the MP3 file and store it in GridFS in the mp3s database
 	mp3Data, err := os.ReadFile(tmpMp3File)
@@ -106,17 +129,21 @@ func toMP3Start(videoID []byte, dbVideos *mongo.Database, dbMp3s *mongo.Database
 	if err != nil {
 		return err
 	}
-	defer uploadStream.Close()
 
-	_, err = uploadStream.Write(mp3Data)
-	if err != nil {
+	if _, err = uploadStream.Write(mp3Data); err != nil {
 		return err
 	}
+	if err = uploadStream.Close(); err != nil {
+		return err
+	}
+
+	mp3id := uploadStream.FileID
+	fmt.Println("Written MP3 to grid, id:", mp3id)
 
 	mp3Message := struct {
 		MP3FileID string `json:"mp3FileId"`
 	}{
-		MP3FileID: "the GridFS file ID of the MP3 file", // This should be the actual ID obtained from the GridFS operation
+		MP3FileID: fmt.Sprint(mp3id),
 	}
 
 	mp3MessageBytes, err := json.Marshal(mp3Message)
@@ -137,6 +164,8 @@ func toMP3Start(videoID []byte, dbVideos *mongo.Database, dbMp3s *mongo.Database
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("Published to MP3 queue file id", string(mp3MessageBytes))
 
 	// Cleanup temporary files
 	os.Remove(tmpVideoFile)

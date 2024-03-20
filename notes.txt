@@ -1,0 +1,15 @@
+minikube start
+--
+psql -U postgres -d auth
+--
+/etc/hosts
+127.0.0.1	converter.com
+127.0.0.1	rabbitmq-manager.com
+--
+http://rabbitmq-manager.com/#/queues
+guest / guest
+--
+mongosh mongodb://mongo_admin:admin123@filesdb-service:27017
+show dbs
+use mp3s
+db.fs.files.find()
