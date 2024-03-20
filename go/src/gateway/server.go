@@ -70,8 +70,9 @@ func uploadFileToGridFS(file io.Reader, fs *gridfs.Bucket) (primitive.ObjectID, 
 
 func publishToRabbitMQ(channel *amqp.Channel, message []byte) error {
 	return channel.Publish(
-		"",      // exchange
-		"queue", // routing key
+		"", // exchange
+		// TODO should be taken from config
+		"video", // routing key
 		false,   // mandatory
 		false,   // immediate
 		amqp.Publishing{

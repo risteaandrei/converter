@@ -1,0 +1,7 @@
+minikube start
+--
+psql -U postgres -d auth
+--
+/etc/hosts
+127.0.0.1	converter.com
+127.0.0.1	rabbitmq-manager.com
